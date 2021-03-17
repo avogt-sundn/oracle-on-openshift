@@ -49,7 +49,7 @@ This guide is condensed from the Oracle guide at https://github.com/oracle/docke
 
            oc create serviceaccount oracle-sacc
            oc adm policy add-scc-to-user anyuid system:serviceaccount:gf-cicd:oracle-sacc\n
-           oc patch deployment/my-db --patch '{"spec":{"template":{"spec":{"serviceAccountName": "oracle-sacc"}}}}'
+           oc patch deployment/test-ora19c-oracle-db --patch '{"spec":{"template":{"spec":{"serviceAccountName": "oracle-sacc"}}}}'
 
 1. connect from your local machine
 
@@ -102,6 +102,12 @@ This guide is condensed from the Oracle guide at https://github.com/oracle/docke
 
 Immediately after the helm install this message will show up at the deployment page (or the deployment.yaml)
   > pods "test-ora19c-oracle-db-7d78bc69c5-" is forbidden: unable to validate against any security context constraint: [fsGroup: Invalid value: []int64{54321}: 54321 is not an allowed group spec.containers[0].securityContext.securityContext.runAsUser: Invalid value: 54321: must be in the ranges: [1001110000, 1001119999]]
+
+Fix it with these commands:
+    
+    oc create serviceaccount oracle-sacc
+    oc adm policy add-scc-to-user anyuid system:serviceaccount:gf-cicd:oracle-sacc
+    oc patch deployment/test-ora19c-oracle-db --patch '{"spec":{"template":{"spec":{"serviceAccountName": "oracle-sacc"}}}}'
 
 Check status:
 

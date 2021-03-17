@@ -21,12 +21,23 @@ This guide is condensed from the Oracle guide at https://github.com/oracle/docke
 
        helm package helm-charts/oracle-db
 
-1. create a namespace on openshift
+1. Create a namespace on openshift
 
     - my name: gf-cicd 
       
           oc project gf-cicd
 
+1. Create a secret to acess Oracle registry to download their images
+   
+      - open your web browser and create an account at https://oracle.com 
+      - use your credentials on creating this secret in the project
+            
+            oc create secret docker-registry regcred \
+            --docker-server=container-registry.oracle.com \
+            --docker-username=avogt@s-und-n.de \
+            --docker-password=*** \
+            --docker-email=avogt@s-und-n.de
+    
 1. Create a deployment, starting oracle
 
     - name for this oracle database is: test-ora19c

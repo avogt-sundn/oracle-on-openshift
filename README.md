@@ -1,105 +1,136 @@
-# oracle-on-openshift
 
-Run the latest Oracle Database on OpenShift.
+# Deploy and use Oracle 19 Database on OpenShift
 
-- fetching the latest image from Oracle as it is released
-- setting it up to be confined to moderate resource utilization
+This guide is condensed from the Oracle guide at https://github.com/oracle/docker-images/tree/main/OracleDatabase/SingleInstance/helm-charts/oracle-db
 
-## Getting the image
+1. Clone this repository
 
-1. You will need a login at oracle.com
-        
-2. create an openshift secret named oracle-pull-secret
+       git clone https://github.com/avogt-sundn/oracle-on-openshift.git
+
+1. Install helm utility
+
+    - On MacOS
     
-       oc create secret docker-registry oracle-pull-secret \
-                    --docker-server=container-registry.oracle.com \
-                    --docker-username=avogt@dummy.com \
-                    --docker-password=**** \ 
-                    --docker-email=avogt@dummy.com
-3. link the secret so that it will be used for pulling images
-   
-       oc secrets link default oracle-pull-secret  --for=pull\n
-       oc secrets link builder oracle-pull-secret
-4. create an imagestream referencing the oracle image
-   
-       oc import-image database/enterprise:latest \
-               --from=container-registry.oracle.com/database/enterprise:latest \
-               --confirm
-
-## Deploying Oracle 
-
-Oracle needs to run with user id 54321, as this is decoded in the Dockerfile via USER comand.
-
-    oc create sa oracle-sacc
-    oc adm policy add-scc-to-user anyuid system:serviceaccount:gf-cicd:oracle-sacc\n
-    oc patch deployment/enterprise --patch '{"spec":{"template":{"spec":{"serviceAccountName": "oracle-sacc"}}}}'
-
-Deployment will restart after patching.
-
-Now look after the pod
-
-    oc get pod
-    NAME                                  READY   STATUS    RESTARTS   AGE
-    enterprise-77b6d84bd9-sxq8j           1/1     Running   0          12m
+          brew install helm
     
-... and look into the log:
-
-    oc logs  enterprise-77b6d84bd9-sxq8j
-    [2021:03:17 12:30:10]: Acquiring lock on /opt/oracle/oradata/.ORCLCDB.create_lck
-    [2021:03:17 12:30:10]: Lock acquired on /opt/oracle/oradata/.ORCLCDB.create_lck
-    [2021:03:17 12:30:10]: Holding on to the lock using /tmp/.ORCLCDB.create_lck
-    ORACLE EDITION: ENTERPRISE
-    ORACLE PASSWORD FOR SYS, SYSTEM AND PDBADMIN: +YHmY+9sdUQ=1
+    - On Windows
     
-    LSNRCTL for Linux: Version 19.0.0.0.0 - Production on 17-MAR-2021 12:30:10
+          download exe from https://github.com/helm/helm/releases
+
+1. Package the helm charts from this repository
+
+       helm package helm-charts/oracle-db
+
+1. create a namespace on openshift
+
+    - my name: gf-cicd 
+      
+          oc project gf-cicd
+
+1. Create a deployment, starting oracle
+
+    - name for this oracle database is: test-ora19c
+    - choose from the storage classes available on your cluster: allzones-ssd
+      
+          helm install test-ora19c --set persistence.storageClass=allzones-ssd oracle-db-1.0.0.tgz
+
+1.  Check the results
+
+    - the deployment was created with a suffix -oracle-db to your name: test-ora19c-oracle-db
+     
+          oc get deployment test-ora19c-oracle-db -o yaml
+
+1. fix userid 
+   >You need to be cluster admin in order to grant these policies
+
+     - Oracle needs to run with user id 54321, as this is decoded in the Dockerfile via USER comand.
+     - Grant any container running with that serviceaccount to set anyuid:
+     - Set the required userid on the deployment, bringing the gained anyuid right to an effect:
+
+           oc create serviceaccount oracle-sacc
+           oc adm policy add-scc-to-user anyuid system:serviceaccount:gf-cicd:oracle-sacc\n
+           oc patch deployment/my-db --patch '{"spec":{"template":{"spec":{"serviceAccountName": "oracle-sacc"}}}}'
+
+1. connect from your local machine
+
+        oc port-forward deployment/ci-oracle19c-oracle-db  5500 1521
+
+1. connect with your IDE to localhost:1521
+1. open browser at localhost:5500
+
+## Additional Information
+### Output from helm install
+
+    NAME: test-ora19c
+    LAST DEPLOYED: Wed Mar 17 17:33:29 2021
+    NAMESPACE: gf-cicd
+    STATUS: deployed
+    REVISION: 1
+    NOTES:
+    #
+    # Copyright (c) 2020, Oracle and/or its affiliates. All rights reserved.
+    # Licensed under the Universal Permissive License v 1.0 as shown at http://oss.oracle.com/licenses/upl.
+    #
     
-    Copyright (c) 1991, 2019, Oracle.  All rights reserved.
+    # ===========================================================================
+    # == Add below entries to your tnsnames.ora to access this database server ==
+    # ====================== from external host =================================
+    ORCLCDB=(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=<ip-address>)(PORT=<port>))
+    (CONNECT_DATA=(SERVER=DEDICATED)(SERVICE_NAME=<ORACLE_SID>)))
+    ORCLPDB1=(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=<ip-address>)(PORT=<port>))
+    (CONNECT_DATA=(SERVER=DEDICATED)(SERVICE_NAME=<ORACLE_PDB>)))
+    #
+    #ip-address : IP address of any of the Kubernetes nodes
+    #port       : Service Port that is mapped to the port 1521 of the container.
+    #
     
-    Starting /opt/oracle/product/19c/dbhome_1/bin/tnslsnr: please wait...
+    Application details
+    ====================
+    IP and port can be found using the following:
     
-    TNSLSNR for Linux: Version 19.0.0.0.0 - Production
-    System parameter file is /opt/oracle/product/19c/dbhome_1/network/admin/listener.ora
-    Log messages written to /opt/oracle/diag/tnslsnr/enterprise-77b6d84bd9-sxq8j/listener/alert/log.xml
-    Listening on: (DESCRIPTION=(ADDRESS=(PROTOCOL=ipc)(KEY=EXTPROC1)))
-    Listening on: (DESCRIPTION=(ADDRESS=(PROTOCOL=tcp)(HOST=0.0.0.0)(PORT=1521)))
+    export NODE_PORT=$(kubectl get --namespace gf-cicd -o jsonpath="{.spec.ports[0].nodePort}" services test-ora19c-oracle-db)
+    export NODE_XDB_PORT=$(kubectl get --namespace gf-cicd -o jsonpath="{.spec.ports[1].nodePort}" services test-ora19c-oracle-db)
+    export NODE_IP=$(kubectl get nodes --namespace gf-cicd -o jsonpath="{.items[0].status.addresses[0].address}")
+    echo listener at $NODE_IP:$NODE_PORT
+    echo XDB at $NODE_IP:$NODE_XDB_PORT
     
-    Connecting to (DESCRIPTION=(ADDRESS=(PROTOCOL=IPC)(KEY=EXTPROC1)))
-    STATUS of the LISTENER
-    ------------------------
-    Alias                     LISTENER
-    Version                   TNSLSNR for Linux: Version 19.0.0.0.0 - Production
-    Start Date                17-MAR-2021 12:30:10
-    Uptime                    0 days 0 hr. 0 min. 0 sec
-    Trace Level               off
-    Security                  ON: Local OS Authentication
-    SNMP                      OFF
-    Listener Parameter File   /opt/oracle/product/19c/dbhome_1/network/admin/listener.ora
-    Listener Log File         /opt/oracle/diag/tnslsnr/enterprise-77b6d84bd9-sxq8j/listener/alert/log.xml
-    Listening Endpoints Summary...
-    (DESCRIPTION=(ADDRESS=(PROTOCOL=ipc)(KEY=EXTPROC1)))
-    (DESCRIPTION=(ADDRESS=(PROTOCOL=tcp)(HOST=0.0.0.0)(PORT=1521)))
-    The listener supports no services
-    The command completed successfully
-    Prepare for db operation
-    8% complete
-    Copying database files
-    31% complete
-    Creating and starting Oracle instance
-    32% complete
-    36% complete
-    40% complete
-    43% complete
-    46% complete
-    Completing Database Creation
-    ➜  ~
+    Oracle Databases SID, PDB name can be figured out by :
+    
+    ORACLE_SID=$(kubectl get  -o jsonpath="{.spec.template.spec.containers[?(.name == 'oracle-db')].env[?(.name == 'ORACLE_SID')].value }" deploy test-ora19c-oracle-db)
+    ORACLE_PDB=$(kubectl get  -o jsonpath="{.spec.template.spec.containers[?(.name == 'oracle-db')].env[?(.name == 'ORACLE_PDB')].value }" deploy test-ora19c-oracle-db)
+# Troubleshooting
+
+Immediately after the helm install this message will show up at the deployment page (or the deployment.yaml)
+  > pods "test-ora19c-oracle-db-7d78bc69c5-" is forbidden: unable to validate against any security context constraint: [fsGroup: Invalid value: []int64{54321}: 54321 is not an allowed group spec.containers[0].securityContext.securityContext.runAsUser: Invalid value: 54321: must be in the ranges: [1001110000, 1001119999]]
+
+Check status:
 
 
-In the top output of the log you can find
-
-    ORACLE PASSWORD FOR SYS, SYSTEM AND PDBADMIN: +YHmY+9sdUQ=1
-.. and the DB identifier is:
-
-    System Identifier(SID):ORCLCDB
-
-
-![img.png](img.png)
+    oc get deployment test-ora19c-oracle-db -o yaml
+    ...
+    status:
+    conditions:
+    - lastTransitionTime: "2021-03-17T16:33:32Z"
+      lastUpdateTime: "2021-03-17T16:33:32Z"
+      message: Deployment has minimum availability.
+      reason: MinimumReplicasAvailable
+      status: "True"
+      type: Available
+    - lastTransitionTime: "2021-03-17T16:33:32Z"
+      lastUpdateTime: "2021-03-17T16:33:32Z"
+      message: 'pods "test-ora19c-oracle-db-7d78bc69c5-" is forbidden: unable to validate
+      against any security context constraint: [fsGroup: Invalid value: []int64{54321}:
+      54321 is not an allowed group spec.containers[0].securityContext.securityContext.runAsUser:
+      Invalid value: 54321: must be in the ranges: [1001110000, 1001119999]]'
+      reason: FailedCreate
+      status: "True"
+      type: ReplicaFailure
+    - lastTransitionTime: "2021-03-17T16:43:33Z"
+      lastUpdateTime: "2021-03-17T16:43:33Z"
+      message: ReplicaSet "test-ora19c-oracle-db-7d78bc69c5" has timed out progressing.
+      reason: ProgressDeadlineExceeded
+      status: "False"
+      type: Progressing
+      observedGeneration: 1
+      unavailableReplicas: 1 
+![img_1.png](img_1.png)

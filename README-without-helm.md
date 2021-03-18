@@ -18,8 +18,9 @@ Run the latest Oracle Database on OpenShift.
                     --docker-email=avogt@dummy.com
 3. link the secret so that it will be used for pulling images
    
-       oc secrets link default oracle-pull-secret  --for=pull\n
+       oc secrets link default oracle-pull-secret  --for=pull
        oc secrets link builder oracle-pull-secret
+   
 4. create an imagestream referencing the oracle image
    
        oc import-image database/enterprise:latest \

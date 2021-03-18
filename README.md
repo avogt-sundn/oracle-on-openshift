@@ -43,7 +43,7 @@ This guide is condensed from the Oracle guide at https://github.com/oracle/docke
     - name for this oracle database is: test-ora19c
     - choose from the storage classes available on your cluster: allzones-ssd
       
-          helm install test-ora19c --set persistence.storageClass=allzones-ssd oracle-db-1.0.0.tgz
+          helm install test-ora19c oracle-db-1.0.0.tgz
 
 1.  Check the results
 
@@ -110,14 +110,42 @@ This guide is condensed from the Oracle guide at https://github.com/oracle/docke
     ORACLE_SID=$(kubectl get  -o jsonpath="{.spec.template.spec.containers[?(.name == 'oracle-db')].env[?(.name == 'ORACLE_SID')].value }" deploy test-ora19c-oracle-db)
     ORACLE_PDB=$(kubectl get  -o jsonpath="{.spec.template.spec.containers[?(.name == 'oracle-db')].env[?(.name == 'ORACLE_PDB')].value }" deploy test-ora19c-oracle-db)
 # Troubleshooting
+### "serviceaccount "oracle-sacc" not found"
+
+Check the deployment yaml
+
+        - type: ReplicaFailure
+      status: 'True'
+      lastUpdateTime: '2021-03-18T14:44:25Z'
+      lastTransitionTime: '2021-03-18T14:44:25Z'
+      reason: FailedCreate
+      message: >-
+        pods "racl-oracle-db-777c944b8c-" is forbidden: error looking up service
+        account gf-cicd/oracle-sacc: serviceaccount "oracle-sacc" not found
+
+The deployment references the needed serviceaccount, but you did not create one:
+
+- either create a service account with these commands if you are cluster admin
+
+
+    oc project <yourproject>
+    oc create serviceaccount oracle-sacc
+    oc adm policy add-scc-to-user anyuid system:serviceaccount:<yourproject>:oracle-sacc
+
+
+
+- or ask the cluster admin for a serviceaccount with anyuid privilege
+
+### "54321 is not an allowed group"
 
 Immediately after the helm install this message will show up at the deployment page (or the deployment.yaml)
   > pods "test-ora19c-oracle-db-7d78bc69c5-" is forbidden: unable to validate against any security context constraint: [fsGroup: Invalid value: []int64{54321}: 54321 is not an allowed group spec.containers[0].securityContext.securityContext.runAsUser: Invalid value: 54321: must be in the ranges: [1001110000, 1001119999]]
 
 Fix it with these commands:
     
+    oc project <yourproject>
     oc create serviceaccount oracle-sacc
-    oc adm policy add-scc-to-user anyuid system:serviceaccount:gf-cicd:oracle-sacc
+    oc adm policy add-scc-to-user anyuid system:serviceaccount:<yourproject>:oracle-sacc
     oc patch deployment/test-ora19c-oracle-db --patch '{"spec":{"template":{"spec":{"serviceAccountName": "oracle-sacc"}}}}'
 
 Check status:

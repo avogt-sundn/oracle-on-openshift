@@ -3,10 +3,6 @@
 
 This guide is condensed from the Oracle guide at https://github.com/oracle/docker-images/tree/main/OracleDatabase/SingleInstance/helm-charts/oracle-db
 
-1. Clone this repository
-
-       git clone https://github.com/avogt-sundn/oracle-on-openshift.git
-
 1. Install helm utility
 
     - On MacOS
@@ -17,13 +13,24 @@ This guide is condensed from the Oracle guide at https://github.com/oracle/docke
     
           download exe from https://github.com/helm/helm/releases
 
+1. Have access to an OpenShift 4 cluster
+   
+  >you will need to have cluster admin privilege in order to create a serviceaccount that grants 
+  > `anyuid` privilege to the Oracle pod.
+
+
+1. Clone this repository
+
+       git clone https://github.com/avogt-sundn/oracle-on-openshift.git
+
 1. Package the helm charts from this repository
 
+       cd oracle-on-openshift
        helm package helm-charts/oracle-db
 
-1. Create a namespace on openshift
+1. Create a namespace/project on openshift
 
-    - my name: gf-cicd 
+    - my name: `gf-cicd` 
       
           oc project gf-cicd
 
@@ -40,7 +47,7 @@ This guide is condensed from the Oracle guide at https://github.com/oracle/docke
     
 1. Create a deployment, starting oracle
 
-    - name for this oracle database is: test-ora19c
+    - name for this oracle database is: `test-ora19c`
     - choose from the storage classes available on your cluster: allzones-ssd
       
           helm install test-ora19c oracle-db-1.0.0.tgz
@@ -52,7 +59,7 @@ This guide is condensed from the Oracle guide at https://github.com/oracle/docke
           oc get deployment test-ora19c-oracle-db -o yaml
 
 1. fix userid 
-   >You need to be cluster admin in order to grant these policies
+   >You need to be cluster admin in order to grant `anyuid` privilege
 
      - Oracle needs to run with user id 54321, as this is decoded in the Dockerfile via USER comand.
      - Grant any container running with that serviceaccount to set anyuid:
@@ -125,13 +132,11 @@ Check the deployment yaml
 
 The deployment references the needed serviceaccount, but you did not create one:
 
-- either create a service account with these commands if you are cluster admin
+  - either create a service account with these commands if you are cluster admin
 
-
-    oc project <yourproject>
-    oc create serviceaccount oracle-sacc
-    oc adm policy add-scc-to-user anyuid system:serviceaccount:<yourproject>:oracle-sacc
-
+        oc project <yourproject>
+        oc create serviceaccount oracle-sacc
+        oc adm policy add-scc-to-user anyuid system:serviceaccount:<yourproject>:oracle-sacc
 
 
 - or ask the cluster admin for a serviceaccount with anyuid privilege

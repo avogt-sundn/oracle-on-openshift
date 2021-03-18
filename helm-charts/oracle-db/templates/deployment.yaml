@@ -28,6 +28,9 @@ spec:
       imagePullSecrets:
         - name: {{ .Values.imagePullSecrets }}
     {{- end }}
+    {{- if .Values.serviceAccountName }}
+      serviceAccountName: {{ .Values.serviceAccountName }}
+    {{- end }}
       securityContext:
         runAsUser: 54321
         fsGroup: 54321

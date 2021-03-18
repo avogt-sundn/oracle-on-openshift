@@ -26,6 +26,7 @@ persistence:
   ## Oracle database data Persistent Volume Storage Class, nfs or block
   storageClass: ""
   size: 100Gi
+  accessMode: ReadWriteOnce
 
 ## Deploy only on nodes in a particular availability domain, eg PHX-AD-1 on OCI
 ## Leave empty if there is no such requirement
@@ -38,11 +39,14 @@ replicas: 1
 loadBalService: false
 
 ## name of image
-image: container-registry.oracle.com/database/enterprise:19.3.0.0
+image: container-registry.oracle.com/database/enterprise:latest
 
 ## image pull policy, IfNotPresent or Always
 imagePullPolicy: Always
 
-## container registry login/password
-imagePullSecrets:
+## container registry login/password, your oracle.com account
+imagePullSecrets: regcred
+
+## service account that allows for userid 54321
+serviceAccountName: oracle-sacc
 
